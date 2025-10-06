@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Appendtricks</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PDF.js for PDF rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- SortableJS for drag-and-drop reordering -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #111827 url('https://images.unsplash.com/photo-1554034483-043a35442c20?q=80&w=2070&auto=format&fit=crop') no-repeat center center fixed;
+            background-size: cover;
+        }
+        .glass-ui {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        .file-input { display: none; }
+        .drag-over { border-color: #4f46e5; transform: scale(1.02); }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.3); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.5); }
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]:focus { outline: none; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; cursor: pointer; background: rgba(255, 255, 255, 0.2); border-radius: 3px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 18px; width: 18px; border-radius: 50%; background: #ffffff; cursor: pointer; margin-top: -6px; box-shadow: 0 0 4px rgba(0,0,0,0.5); }
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+        .sortable-ghost { opacity: 0.4; background: #4f46e5; }
+        .sortable-chosen { cursor: grabbing; }
+        .transition-all { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .hidden-view { display: none !important; }
+        .custom-checkbox:checked { background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e"); }
+        .gemini-btn .spinner, .export-gemini-btn .spinner { display: none; }
+        .gemini-btn.loading .spinner, .export-gemini-btn.loading .spinner { display: inline-block; }
+        .gemini-btn.loading .icon, .export-gemini-btn.loading .icon { display: none; }
+        .export-btn-size { font-size: 0.7rem; line-height: 0.9rem; opacity: 0.8; }
+        #image-list .name-input {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid #4f46e5;
+            color: white;
+            padding: 2px 4px;
+            border-radius: 4px;
+            width: 100%;
+        }
+
+        /* Scanline Animation */
+        #scanline {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 40px;
+            background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+            box-shadow: 0 0 25px 10px rgba(220, 230, 255, 0.5);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 50;
+            transform: translateY(-100%);
+            transition: opacity 0.3s ease;
+        }
+        body.is-processing #scanline {
+            opacity: 0.6;
+            animation: scan-vertical 2s ease-in-out infinite alternate;
+        }
+        @keyframes scan-vertical {
+            from { transform: translateY(-40px); }
+            to { transform: translateY(90vh); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-7xl h-[90vh] glass-ui rounded-2xl flex flex-col md:flex-row overflow-hidden">
+        
+        <aside class="w-full md:w-80 lg:w-96 p-6 flex flex-col space-y-6 overflow-y-auto border-r border-gray-200/20">
+            <div class="text-center">
+                <h1 class="text-2xl font-bold text-white">Appendtricks</h1>
+                <p class="text-sm text-gray-300">Better Image Stitching</p>
+            </div>
+
+            <!-- Layout -->
+            <div>
+                <label class="font-semibold text-white">Layout</label>
+                <div id="layout-controls" class="grid grid-cols-2 gap-2 mt-2">
+                    <button data-layout="vertical" class="control-btn p-2 rounded-lg text-sm transition-all bg-indigo-500/50">Vertical</button>
+                    <button data-layout="horizontal" class="control-btn p-2 rounded-lg text-sm transition-all hover:bg-white/20">Horizontal</button>
+                </div>
+            </div>
+
+            <!-- Background -->
+            <div>
+                <label class="font-semibold text-white">Background</label>
+                <div id="background-controls" class="grid grid-cols-3 gap-2 mt-2">
+                    <button data-bg="white" class="control-btn p-2 rounded-lg text-sm transition-all bg-indigo-500/50">White</button>
+                    <button data-bg="black" class="control-btn p-2 rounded-lg text-sm transition-all hover:bg-white/20">Black</button>
+                    <button data-bg="transparent" class="control-btn p-2 rounded-lg text-sm transition-all hover:bg-white/20">Transparent</button>
+                </div>
+            </div>
+
+            <!-- Margin -->
+            <div>
+                <label for="margin-slider" class="flex justify-between items-center font-semibold text-white">
+                    <span>Spacer Margin</span>
+                    <div class="flex items-center gap-2">
+                        <input id="margin-number" type="number" min="0" max="40" value="20" class="w-16 text-center bg-black/20 rounded-md py-1">
+                        <span>px</span>
+                    </div>
+                </label>
+                <input id="margin-slider" type="range" min="0" max="40" value="20" step="5" class="w-full mt-2">
+                <div class="flex items-center mt-3">
+                    <input id="border-checkbox" type="checkbox" class="custom-checkbox h-5 w-5 rounded bg-black/20 border-gray-400/50 text-indigo-500 focus:ring-indigo-500/50">
+                    <label for="border-checkbox" class="ml-3 text-sm text-gray-200">Apply border margin</label>
+                </div>
+            </div>
+
+            <!-- Sort Order -->
+            <div>
+                <label class="font-semibold text-white">Sort Order</label>
+                <div id="sort-controls" class="grid grid-cols-3 gap-2 mt-2">
+                    <button data-sort="az" class="control-btn p-2 rounded-lg text-sm transition-all bg-indigo-500/50">A-Z</button>
+                    <button data-sort="za" class="control-btn p-2 rounded-lg text-sm transition-all hover:bg-white/20">Z-A</button>
+                    <button data-sort="custom" class="control-btn p-2 rounded-lg text-sm transition-all hover:bg-white/20" disabled>Custom</button>
+                </div>
+            </div>
+
+            <!-- Export -->
+            <div id="export-controls" class="pt-4 border-t border-gray-200/20 !mt-auto hidden">
+                 <!-- Export Filename -->
+                <div>
+                    <label for="export-filename" class="font-semibold text-white">Export Filename</label>
+                    <div class="flex items-center mt-2">
+                        <input id="export-filename" type="text" value="appendtricks-export" class="flex-1 min-w-0 p-2 bg-black/20 rounded-l-lg text-sm placeholder-gray-400 border border-transparent focus:border-indigo-400 focus:ring-0 transition-all">
+                        <button id="export-gemini-btn" class="export-gemini-btn p-2 bg-black/20 hover:bg-white/20 transition-colors rounded-r-lg" title="Generate Filename with AI">
+                            <span class="icon">✨</span>
+                            <span class="spinner w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <label class="font-semibold text-white">Export Formats</label>
+                    <div class="grid grid-cols-3 gap-2 mt-2">
+                        <button id="export-png-btn" class="p-2 bg-green-600/80 hover:bg-green-500/80 rounded-lg font-semibold transition-all flex flex-col items-center justify-center h-14">PNG <span class="export-btn-size">(--)</span></button>
+                        <button id="export-jpg-btn" class="p-2 bg-green-600/80 hover:bg-green-500/80 rounded-lg font-semibold transition-all flex flex-col items-center justify-center h-14">JPG <span class="export-btn-size">(--)</span></button>
+                        <button id="export-pdf-btn" class="p-2 bg-green-600/80 hover:bg-green-500/80 rounded-lg font-semibold transition-all flex flex-col items-center justify-center h-14">PDF <span class="export-btn-size">(--)</span></button>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <label for="pdf-quality-slider" class="font-semibold text-white">PDF/JPG Quality</label>
+                    <input id="pdf-quality-slider" type="range" min="0.1" max="1.0" value="0.8" step="0.1" class="w-full mt-2">
+                    <div id="pdf-quality-label" class="text-sm text-center text-gray-300 mt-1">High (80%)</div>
+                </div>
+            </div>
+
+            <!-- Reset Button -->
+            <button id="reset-btn" class="w-full mt-4 p-2 bg-red-600/80 hover:bg-red-500/80 rounded-lg font-semibold transition-all">Reset</button>
+
+        </aside>
+
+        <main class="flex-1 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+            <div id="scanline"></div>
+            
+            <div id="uploader-view" class="w-full h-full flex flex-col items-center justify-center transition-all">
+                <div id="drop-zone" class="w-full h-full border-4 border-dashed border-gray-200/40 rounded-xl flex flex-col items-center justify-center text-center p-8 transition-all">
+                    <svg class="w-16 h-16 text-gray-200/60 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-4-4V7a4 4 0 014-4h10a4 4 0 014 4v5a4 4 0 01-4 4H7z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 16v1a2 2 0 01-2 2H6a2 2 0 01-2-2v-1"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 12l-2-2m0 0l-2 2m2-2v6"></path></svg>
+                    <p class="text-lg font-semibold text-white">Drag & Drop Images or PDFs</p>
+                    <p class="text-gray-300">or</p>
+                    <label for="file-upload" class="mt-2 px-6 py-2 bg-indigo-600/80 hover:bg-indigo-500/80 rounded-lg font-semibold cursor-pointer transition-all">Select Files</label>
+                    <input id="file-upload" type="file" multiple accept="image/*,application/pdf" class="file-input">
+                
+                    <div class="w-full max-w-md mt-4">
+                        <textarea id="url-input" rows="2" class="w-full p-2 bg-black/20 rounded-lg text-sm placeholder-gray-400 border border-transparent focus:border-indigo-400 focus:ring-0 transition-all" placeholder="Paste image URLs, one per line..."></textarea>
+                        <button id="add-url-btn" class="w-full mt-2 p-2 bg-indigo-600/80 hover:bg-indigo-500/80 rounded-lg font-semibold transition-all">Add from URLs</button>
+                        <p id="url-error" class="text-xs text-red-400 mt-1 h-3"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="processing-view" class="w-full h-full flex-col items-center justify-center space-y-4 absolute inset-0 bg-black/50 transition-all hidden-view">
+                <div class="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+                <p id="processing-text" class="text-white">Processing...</p>
+            </div>
+
+            <div id="result-view" class="w-full h-full flex flex-col items-center justify-center transition-all opacity-0 hidden-view">
+                <div class="w-full flex-1 min-h-0 flex flex-col md:flex-row gap-4">
+                    <div class="w-full md:w-56 h-1/3 md:h-full flex-shrink-0">
+                         <div class="flex justify-between items-center mb-2">
+                            <h3 class="font-semibold">Image Order</h3>
+                            <button id="clear-images-btn" title="Clear All Images" class="text-xs text-gray-400 hover:text-white hover:bg-white/10 px-2 py-1 rounded-md transition-colors">Clear All</button>
+                         </div>
+                         <div id="image-list" class="h-full overflow-y-auto bg-black/20 rounded-lg p-2 space-y-2"></div>
+                    </div>
+                    <div class="flex-1 min-h-0 bg-black/20 rounded-lg flex items-center justify-center p-2 overflow-auto">
+                        <canvas id="canvas" class="max-w-full max-h-full rounded"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+        </main>
+    </div>
+    
+    <script>
+        // IIFE to encapsulate the script
+        (() => {
+            // PDF.js worker setup
+            if (window.pdfjsLib) {
+                pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js`;
+            }
+
+            // --- STATE MANAGEMENT ---
+            const getDefaultState = () => ({
+                images: [], layout: 'vertical', backgroundColor: 'white',
+                margin: 20, applyBorder: false, sort: 'az', isProcessing: false, pdfQuality: 0.8
+            });
+            let state = getDefaultState();
+
+            // --- DOM ELEMENTS ---
+            const dom = {
+                layoutControls: document.getElementById('layout-controls'),
+                backgroundControls: document.getElementById('background-controls'),
+                sortControls: document.getElementById('sort-controls'),
+                marginSlider: document.getElementById('margin-slider'),
+                marginNumber: document.getElementById('margin-number'),
+                borderCheckbox: document.getElementById('border-checkbox'),
+                urlInput: document.getElementById('url-input'), addUrlBtn: document.getElementById('add-url-btn'),
+                urlError: document.getElementById('url-error'), exportControls: document.getElementById('export-controls'),
+                exportPngBtn: document.getElementById('export-png-btn'), exportJpgBtn: document.getElementById('export-jpg-btn'),
+                exportPdfBtn: document.getElementById('export-pdf-btn'), resetBtn: document.getElementById('reset-btn'),
+                dropZone: document.getElementById('drop-zone'), fileUpload: document.getElementById('file-upload'),
+                uploaderView: document.getElementById('uploader-view'), processingView: document.getElementById('processing-view'),
+                processingText: document.getElementById('processing-text'), resultView: document.getElementById('result-view'),
+                imageList: document.getElementById('image-list'), canvas: document.getElementById('canvas'),
+                pdfQualitySlider: document.getElementById('pdf-quality-slider'),
+                pdfQualityLabel: document.getElementById('pdf-quality-label'),
+                exportFilename: document.getElementById('export-filename'),
+                exportGeminiBtn: document.getElementById('export-gemini-btn'),
+                clearImagesBtn: document.getElementById('clear-images-btn'),
+            };
+
+            let sortableInstance = null;
+            
+            // --- GEMINI API ---
+            const imageToB64 = (imageObject) => {
+                const canvas = document.createElement('canvas');
+                canvas.width = imageObject.width; canvas.height = imageObject.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(imageObject, 0, 0);
+                return canvas.toDataURL('image/png').split(',')[1];
+            };
+            
+            async function callGemini(base64ImageData, prompt) {
+                const apiKey = ""; 
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                const payload = { contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: "image/png", data: base64ImageData } }] }] };
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+
+                if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+                const result = await response.json();
+                const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!text) throw new Error("Invalid response structure from API.");
+                return text.trim().replace(/['"]+/g, '');
+            }
+
+            async function handleGeminiTitleGeneration(id) {
+                const image = state.images.find(img => img.id === id);
+                const button = document.querySelector(`.gemini-btn[data-id="${id}"]`);
+                if (!image || !button) return;
+
+                button.classList.add('loading'); button.disabled = true;
+                try {
+                    const base64ImageData = imageToB64(image.imageObject);
+                    const prompt = "Analyze this image and provide a short, descriptive title of 5 words or less. Use lowercase letters and hyphens instead of spaces. Example: 'a-red-car-on-a-sunny-day'.";
+                    const sanitizedName = await callGemini(base64ImageData, prompt);
+                    image.name = sanitizedName + ".jpg"; 
+                    await updateAndRender();
+                } catch (error) { console.error("Gemini API call failed:", error); } 
+                finally { button.classList.remove('loading'); button.disabled = false; }
+            }
+            
+            async function handleGeminiExportName() {
+                const button = dom.exportGeminiBtn;
+                if (!dom.canvas) return;
+
+                button.classList.add('loading'); button.disabled = true;
+                try {
+                    const base64ImageData = dom.canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+                    const prompt = "Analyze this composite image and provide a short, descriptive title of 5 words or less that summarizes the collection. Use lowercase letters and hyphens instead of spaces.";
+                    const newName = await callGemini(base64ImageData, prompt);
+                    dom.exportFilename.value = newName;
+                } catch (error) { console.error("Gemini export name generation failed:", error); } 
+                finally { button.classList.remove('loading'); button.disabled = false; }
+            }
+
+            // --- FILE & IMAGE HANDLING ---
+            const loadImageFromFile = (file) => new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img); img.onerror = reject;
+                img.src = URL.createObjectURL(file);
+            });
+
+            const loadImageFromPdf = async (file) => {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                const page = await pdf.getPage(1);
+                const viewport = page.getViewport({ scale: 2.0 });
+                const canvas = document.createElement('canvas');
+                canvas.width = viewport.width; canvas.height = viewport.height;
+                const context = canvas.getContext('2d');
+                await page.render({ canvasContext: context, viewport: viewport }).promise;
+                
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img); img.onerror = reject;
+                    img.src = canvas.toDataURL();
+                });
+            };
+
+            const processFile = async (file, index) => {
+                let imageObject;
+                try {
+                    if (file.type === 'application/pdf') imageObject = await loadImageFromPdf(file);
+                    else if (file.type.startsWith('image/')) imageObject = await loadImageFromFile(file);
+                    else return null;
+                    return {
+                        id: `file-${Date.now()}-${index}`, name: file.name, file, objectURL: URL.createObjectURL(file),
+                        imageObject, width: imageObject.width, height: imageObject.height
+                    };
+                } catch (error) { console.error(`Failed to load file ${file.name}:`, error); return null; }
+            };
+
+            async function handleFiles(files) {
+                if (files.length === 0 || state.isProcessing) return;
+                setProcessing(true, `Processing ${files.length} file(s)...`);
+                const newImages = (await Promise.all(Array.from(files).map(processFile))).filter(Boolean);
+                state.images.push(...newImages);
+                await updateAndRender();
+                setProcessing(false);
+            }
+            
+            async function handleUrls() {
+                const urls = dom.urlInput.value.trim().split('\n').filter(Boolean);
+                if (urls.length === 0 || state.isProcessing) return;
+                
+                setProcessing(true, `Fetching ${urls.length} URL(s)...`);
+                dom.urlError.textContent = '';
+                let successCount = 0;
+                
+                const files = await Promise.all(urls.map(async (url) => {
+                    try {
+                        const response = await fetch(url);
+                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                        const blob = await response.blob();
+                        const filename = url.substring(url.lastIndexOf('/') + 1).split('?')[0] || 'image-from-url.jpg';
+                        successCount++;
+                        return new File([blob], filename, { type: blob.type });
+                    } catch(e) { console.error(`Failed to fetch ${url}:`, e); return null; }
+                }));
+
+                const validFiles = files.filter(Boolean);
+                if(validFiles.length > 0) {
+                    const newImages = (await Promise.all(validFiles.map(processFile))).filter(Boolean);
+                    state.images.push(...newImages);
+                    await updateAndRender();
+                }
+
+                if (successCount < urls.length) {
+                     dom.urlError.textContent = `${urls.length - successCount} URLs failed (check CORS/links).`;
+                }
+
+                dom.urlInput.value = '';
+                setProcessing(false);
+            }
+
+            // --- CORE LOGIC & UTILITIES ---
+             function formatBytes(bytes, decimals = 2) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const dm = decimals < 0 ? 0 : decimals;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+            }
+
+            function getOrderedImages() {
+                let sortedImages = [...state.images];
+                if (state.sort === 'az') sortedImages.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+                else if (state.sort === 'za') sortedImages.sort((a, b) => b.name.localeCompare(a.name, undefined, { numeric: true }));
+                else if (state.sort === 'custom' && dom.imageList.children.length > 0) {
+                    const orderMap = new Map(Array.from(dom.imageList.children).map((child, index) => [child.dataset.id, index]));
+                    sortedImages.sort((a, b) => (orderMap.get(a.id) ?? Infinity) - (orderMap.get(b.id) ?? Infinity));
+                }
+                return sortedImages;
+            }
+
+            function drawCanvas() {
+                return new Promise(resolve => {
+                    requestAnimationFrame(() => {
+                        const images = getOrderedImages();
+                        if (images.length === 0) return resolve();
+                        const spacerMargin = Number(state.margin);
+                        const borderMargin = state.applyBorder ? spacerMargin : 0;
+                        const ctx = dom.canvas.getContext('2d');
+                        let canvasWidth, canvasHeight, currentPos = borderMargin;
+                        
+                        if (state.layout === 'vertical') {
+                            canvasWidth = Math.max(...images.map(img => img.width)) + (2 * borderMargin);
+                            const totalImageHeight = images.reduce((acc, img) => acc + (img.height * ((canvasWidth - 2 * borderMargin) / img.width)), 0);
+                            canvasHeight = totalImageHeight + (spacerMargin * (images.length - 1)) + (2 * borderMargin);
+                        } else {
+                            canvasHeight = Math.max(...images.map(img => img.height)) + (2 * borderMargin);
+                            const totalImageWidth = images.reduce((acc, img) => acc + (img.width * ((canvasHeight - 2 * borderMargin) / img.height)), 0);
+                            canvasWidth = totalImageWidth + (spacerMargin * (images.length - 1)) + (2 * borderMargin);
+                        }
+                        
+                        dom.canvas.width = canvasWidth; dom.canvas.height = canvasHeight;
+                        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+                        if (state.backgroundColor && state.backgroundColor !== 'transparent') {
+                            ctx.fillStyle = state.backgroundColor;
+                            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+                        }
+
+                        images.forEach(img => {
+                            if (state.layout === 'vertical') {
+                                const scaledWidth = canvasWidth - (2 * borderMargin);
+                                const scaledHeight = img.height * (scaledWidth / img.width);
+                                ctx.drawImage(img.imageObject, borderMargin, currentPos, scaledWidth, scaledHeight);
+                                currentPos += scaledHeight + spacerMargin;
+                            } else {
+                                const scaledHeight = canvasHeight - (2 * borderMargin);
+                                const scaledWidth = img.width * (scaledHeight / img.height);
+                                ctx.drawImage(img.imageObject, currentPos, borderMargin, scaledWidth, scaledHeight);
+                                currentPos += scaledWidth + spacerMargin;
+                            }
+                        });
+                        resolve();
+                    });
+                });
+            }
+
+            // --- UI & STATE UPDATES ---
+            function updateState(key, value) { state[key] = value; }
+
+            async function updateSettingAndRender(key, value) {
+                updateState(key, value);
+                await updateAndRender();
+            }
+
+            async function updateAndRender() {
+                const wasProcessing = state.isProcessing;
+                if (state.images.length > 0) {
+                    if (!wasProcessing) setProcessing(true, 'Updating canvas...');
+                    renderImageList();
+                    await drawCanvas();
+                    updateExportButtonSizes();
+                    if (!wasProcessing) setProcessing(false);
+                    setView('result');
+                } else { setView('uploader'); }
+                updateControlsUI();
+            }
+            
+            function renderImageList() {
+                const orderedImages = getOrderedImages();
+                dom.imageList.innerHTML = orderedImages.map(img => `
+                    <div data-id="${img.id}" class="flex items-center p-2 bg-white/10 rounded-lg">
+                        <img src="${img.objectURL.startsWith('blob:') ? img.objectURL : img.imageObject.src}" class="w-10 h-10 rounded-md object-cover mr-3 cursor-grab">
+                        <span class="name-display text-xs text-gray-200 truncate flex-1">${img.name}</span>
+                        <button class="pencil-btn ml-auto p-1 text-gray-300 hover:text-white transition-colors" title="Rename Image">✏️</button>
+                        <button class="gemini-btn ml-1 p-1 text-gray-300 hover:text-white transition-colors" title="Generate Title with AI">
+                           <span class="icon">✨</span>
+                           <span class="spinner w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        </button>
+                        <button class="remove-btn ml-1 p-1 leading-none text-gray-400 hover:text-white">&times;</button>
+                    </div>`).join('');
+
+                if (sortableInstance) sortableInstance.destroy();
+                sortableInstance = Sortable.create(dom.imageList, {
+                    animation: 150, ghostClass: 'sortable-ghost', chosenClass: 'sortable-chosen',
+                    onEnd: () => updateSettingAndRender('sort', 'custom')
+                });
+            }
+            
+            function updateControlsUI() {
+                const hasImages = state.images.length > 0;
+                const toggleActive = (container, dataKey, value) => {
+                    container.querySelectorAll('button').forEach(btn => {
+                        btn.classList.toggle('bg-indigo-500/50', btn.dataset[dataKey] === value);
+                        btn.classList.toggle('hover:bg-white/20', btn.dataset[dataKey] !== value);
+                    });
+                };
+                toggleActive(dom.layoutControls, 'layout', state.layout);
+                toggleActive(dom.backgroundControls, 'bg', state.backgroundColor);
+                toggleActive(dom.sortControls, 'sort', state.sort);
+                dom.borderCheckbox.checked = state.applyBorder;
+                dom.sortControls.querySelector('[data-sort="custom"]').disabled = !hasImages;
+                dom.exportControls.style.display = hasImages ? 'block' : 'none';
+                updatePdfQualityLabel(state.pdfQuality);
+                dom.pdfQualitySlider.value = state.pdfQuality;
+            }
+
+            function updatePdfQualityLabel(value) {
+                const quality = parseFloat(value);
+                let label = 'Medium';
+                if (quality >= 0.8) label = 'High';
+                if (quality < 0.5) label = 'Low';
+                dom.pdfQualityLabel.textContent = `${label} (${Math.round(quality * 100)}%)`;
+            }
+            
+            function updateExportButtonSizes() {
+                if (state.images.length === 0) return;
+                const quality = state.pdfQuality;
+                
+                const pngUrl = dom.canvas.toDataURL('image/png');
+                const jpgUrl = dom.canvas.toDataURL('image/jpeg', quality);
+
+                const pngSize = formatBytes(pngUrl.split(',')[1].length * 0.75);
+                const jpgSize = formatBytes(jpgUrl.split(',')[1].length * 0.75);
+                
+                dom.exportPngBtn.querySelector('.export-btn-size').textContent = `(${pngSize})`;
+                dom.exportJpgBtn.querySelector('.export-btn-size').textContent = `(${jpgSize})`;
+                dom.exportPdfBtn.querySelector('.export-btn-size').textContent = `(${jpgSize})`;
+            }
+
+            function setView(view) {
+                dom.uploaderView.classList.toggle('hidden-view', view !== 'uploader');
+                dom.resultView.classList.toggle('hidden-view', view !== 'result');
+                dom.resultView.classList.toggle('opacity-0', view !== 'result');
+            }
+
+            function setProcessing(isProcessing, text = 'Processing...') {
+                state.isProcessing = isProcessing;
+                dom.processingText.textContent = text;
+                dom.processingView.classList.toggle('hidden-view', !isProcessing);
+                document.body.classList.toggle('is-processing', isProcessing);
+            }
+
+            function clearImages() {
+                if (state.images) {
+                    state.images.forEach(img => URL.revokeObjectURL(img.objectURL));
+                }
+                state.images = [];
+                dom.imageList.innerHTML = '';
+                dom.fileUpload.value = '';
+                setView('uploader');
+                updateControlsUI();
+            }
+            
+            function resetApp() {
+                if (state.images) state.images.forEach(img => URL.revokeObjectURL(img.objectURL));
+                state = getDefaultState();
+                dom.imageList.innerHTML = ''; dom.fileUpload.value = ''; dom.urlInput.value = '';
+                syncMarginControls(state.margin);
+                setView('uploader');
+                updateControlsUI();
+            }
+            
+            function syncMarginControls(value) {
+                const clampedValue = Math.max(0, Math.min(40, Number(value)));
+                state.margin = clampedValue;
+                dom.marginSlider.value = clampedValue;
+                dom.marginNumber.value = clampedValue;
+            }
+            
+            function enableManualRename(id, nameDisplay) {
+                const image = state.images.find(img => img.id === id);
+                if (!image) return;
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = image.name;
+                input.className = 'name-input text-xs';
+                
+                nameDisplay.replaceWith(input);
+                input.focus();
+                input.select();
+
+                const saveName = () => {
+                    const newName = input.value.trim();
+                    if (newName) {
+                        image.name = newName;
+                    }
+                    input.replaceWith(nameDisplay);
+                    renderImageList();
+                };
+                
+                input.addEventListener('blur', saveName);
+                input.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') input.blur();
+                    if (e.key === 'Escape') {
+                        input.value = image.name;
+                        input.blur();
+                    }
+                });
+            }
+
+            // --- EVENT LISTENERS ---
+            function setupEventListeners() {
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => dom.dropZone.addEventListener(e, p => { p.preventDefault(); p.stopPropagation(); }));
+                dom.dropZone.addEventListener('dragenter', () => dom.dropZone.classList.add('drag-over'));
+                dom.dropZone.addEventListener('dragleave', () => dom.dropZone.classList.remove('drag-over'));
+                dom.dropZone.addEventListener('drop', e => { dom.dropZone.classList.remove('drag-over'); handleFiles(e.dataTransfer.files); });
+                dom.fileUpload.addEventListener('change', e => handleFiles(e.target.files));
+                dom.addUrlBtn.addEventListener('click', handleUrls);
+
+                const setupControlGroup = (container, key) => container.addEventListener('click', e => {
+                    if (e.target.tagName === 'BUTTON' && !e.target.disabled) {
+                        updateSettingAndRender(key, e.target.dataset[Object.keys(e.target.dataset)[0]]);
+                    }
+                });
+                setupControlGroup(dom.layoutControls, 'layout');
+                setupControlGroup(dom.backgroundControls, 'backgroundColor');
+                setupControlGroup(dom.sortControls, 'sort');
+
+                dom.marginSlider.addEventListener('input', e => syncMarginControls(e.target.value));
+                dom.marginSlider.addEventListener('change', () => updateAndRender());
+                dom.marginNumber.addEventListener('input', e => syncMarginControls(e.target.value));
+                dom.marginNumber.addEventListener('change', () => updateAndRender());
+                dom.borderCheckbox.addEventListener('change', e => updateSettingAndRender('applyBorder', e.target.checked));
+                dom.pdfQualitySlider.addEventListener('input', e => {
+                    const quality = parseFloat(e.target.value);
+                    state.pdfQuality = quality;
+                    updatePdfQualityLabel(quality);
+                    updateExportButtonSizes();
+                });
+
+                dom.imageList.addEventListener('click', e => {
+                    const parentDiv = e.target.closest('[data-id]');
+                    if (!parentDiv) return;
+                    const id = parentDiv.dataset.id;
+                    
+                    if (e.target.closest('.remove-btn')) {
+                        state.images = state.images.filter(img => img.id !== id);
+                        if (state.images.length === 0) resetApp(); else updateAndRender();
+                    } else if (e.target.closest('.gemini-btn')) { 
+                        handleGeminiTitleGeneration(id); 
+                    } else if (e.target.closest('.pencil-btn')) {
+                        const nameDisplay = parentDiv.querySelector('.name-display');
+                        enableManualRename(id, nameDisplay);
+                    }
+                });
+                
+                dom.exportGeminiBtn.addEventListener('click', handleGeminiExportName);
+                dom.clearImagesBtn.addEventListener('click', clearImages);
+                
+                const exportHandler = format => () => {
+                    const filename = dom.exportFilename.value.trim() || 'appendtricks-export';
+                    const link = document.createElement('a');
+                    link.download = `${filename}.${format}`;
+                    const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
+                    const quality = state.pdfQuality;
+                    let canvasToExport = dom.canvas;
+
+                    if (format === 'jpg' && state.backgroundColor === 'transparent') {
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = dom.canvas.width; tempCanvas.height = dom.canvas.height;
+                        const tempCtx = tempCanvas.getContext('2d');
+                        tempCtx.fillStyle = '#FFFFFF'; tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+                        tempCtx.drawImage(dom.canvas, 0, 0);
+                        canvasToExport = tempCanvas;
+                    }
+                    link.href = canvasToExport.toDataURL(mimeType, quality);
+                    link.click();
+                };
+
+                const pdfExportHandler = () => {
+                    const filename = dom.exportFilename.value.trim() || 'appendtricks-export';
+                    const { jsPDF } = window.jspdf;
+                    const quality = state.pdfQuality;
+                    const imageData = dom.canvas.toDataURL('image/jpeg', quality);
+                    const width = dom.canvas.width, height = dom.canvas.height;
+                    const pdf = new jsPDF({ orientation: width > height ? 'l' : 'p', unit: 'px', format: [width, height] });
+                    pdf.addImage(imageData, 'JPEG', 0, 0, width, height, undefined, 'FAST');
+                    pdf.save(`${filename}.pdf`);
+                };
+
+                dom.exportPngBtn.addEventListener('click', exportHandler('png'));
+                dom.exportJpgBtn.addEventListener('click', exportHandler('jpg'));
+                dom.exportPdfBtn.addEventListener('click', pdfExportHandler);
+                dom.resetBtn.addEventListener('click', resetApp);
+            }
+
+            // --- INITIALIZATION ---
+            setupEventListeners();
+            resetApp();
+        })();
+    </script>
+</body>
+</html>
